@@ -1,5 +1,8 @@
-package com.echo;
+package com.echo;//package com.echo;
 
+import com.ververica.cdc.connectors.mysql.MySqlSource;
+import com.ververica.cdc.debezium.DebeziumSourceFunction;
+import com.ververica.cdc.debezium.StringDebeziumDeserializationSchema;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.ExecutionEnvironment;
@@ -120,6 +123,31 @@ public class Main {
         //执行
         env.execute();
         // 事件驱动：有数据来才有下一步
+    }
+
+
+    public static void flinkCDC() throws Exception {
+        //1 获取flink执行环境
+        StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+        environment.setParallelism(1);
+        //2 通过flink CDC构建SourceFunction
+        DebeziumSourceFunction<String> sourceFunction = MySqlSource.<String>builder()
+                .hostname("hadoop102")
+                .port(3306)
+                .username("root")
+                .password("000000")
+                .databaseList("cdc_test")
+                .tableList("cdc_test.table_a")
+                .deserializer(new StringDebeziumDeserializationSchema())
+                .build();
+        DataStreamSource<String> dataStreamSource = environment.addSource(sourceFunction);
+        //3 数据打印
+        dataStreamSource.print();
+
+        //4 启动任务
+        environment.execute("FlinkCDC");
+
+
     }
 
 
