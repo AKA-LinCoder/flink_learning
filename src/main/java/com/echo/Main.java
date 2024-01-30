@@ -1,6 +1,8 @@
 package com.echo;//package com.echo;
 
+import com.ibm.icu.impl.Row;
 import com.ververica.cdc.connectors.mysql.MySqlSource;
+import com.ververica.cdc.connectors.mysql.table.StartupOptions;
 import com.ververica.cdc.debezium.DebeziumSourceFunction;
 import com.ververica.cdc.debezium.StringDebeziumDeserializationSchema;
 import org.apache.flink.api.common.functions.FlatMapFunction;
@@ -12,17 +14,23 @@ import org.apache.flink.api.java.operators.DataSource;
 import org.apache.flink.api.java.operators.FlatMapOperator;
 import org.apache.flink.api.java.operators.UnsortedGrouping;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.runtime.state.filesystem.FsStateBackend;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.util.Collector;
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        wordCountBatchByDataSetApi();
-        wordCountStream();
-        wordCountStreamUnbounded();
+//        wordCountBatchByDataSetApi();
+//        wordCountStream();
+//        wordCountStreamUnbounded();
+        flinkCDC();
     }
 
     //基于DataSet API实现wordCount ,过时不推荐
@@ -130,25 +138,53 @@ public class Main {
         //1 获取flink执行环境
         StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
         environment.setParallelism(1);
+        //1.1开启CK
+        environment.enableCheckpointing(5000);
+        environment.getCheckpointConfig().setAlignmentTimeout(10000);
+        environment.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
+        environment.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
+
+//        environment.setStateBackend(new FsStateBackend())
+
         //2 通过flink CDC构建SourceFunction
         DebeziumSourceFunction<String> sourceFunction = MySqlSource.<String>builder()
-                .hostname("hadoop102")
+                .hostname("192.168.1.133")
                 .port(3306)
                 .username("root")
-                .password("000000")
+                .password("Estim@b509")
                 .databaseList("cdc_test")
-                .tableList("cdc_test.table_a")
+                .tableList("cdc_test.user_info")
                 .deserializer(new StringDebeziumDeserializationSchema())
+                .startupOptions(StartupOptions.initial())
                 .build();
         DataStreamSource<String> dataStreamSource = environment.addSource(sourceFunction);
         //3 数据打印
         dataStreamSource.print();
-
         //4 启动任务
         environment.execute("FlinkCDC");
-
-
     }
 
+    public static void flinkSqlCDC() throws Exception{
+        /// flinkSql一次只能读一张表
+        StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+        environment.setParallelism(1);
+        StreamTableEnvironment tableEnvironment = StreamTableEnvironment.create(environment);
+        tableEnvironment.executeSql("CREATE TABLE user_info("+
+                    "id STRING primary key,"+
+                    "name STRING,"+") WITH ("+
+                    " 'connector' = 'mysql-cdc',"+
+                    " 'hostname' = '192.168.1.133', "+
+                " 'scan.startup.mode' = 'latest-offset',"+
+                " 'port' = '3306',"+
+                " 'username' = 'root',"+
+                " 'password' = 'Estim@b509',"+
+                " 'database-name' = 'cdc_test',"+
+                " 'table-name' = 'user_info',"
+                +")");
+        Table table = tableEnvironment.sqlQuery("select * from user_info");
+        DataStream<Tuple2<Boolean, Row>> retractStream = tableEnvironment.toRetractStream(table, Row.class);
+        retractStream.print();
 
+        environment.execute("flinkSql");
+    }
 }
