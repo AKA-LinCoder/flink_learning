@@ -6,6 +6,8 @@ import com.ververica.cdc.connectors.mysql.table.StartupOptions;
 import com.ververica.cdc.debezium.DebeziumSourceFunction;
 import com.ververica.cdc.debezium.StringDebeziumDeserializationSchema;
 import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.restartstrategy.RestartStrategies;
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -14,6 +16,8 @@ import org.apache.flink.api.java.operators.DataSource;
 import org.apache.flink.api.java.operators.FlatMapOperator;
 import org.apache.flink.api.java.operators.UnsortedGrouping;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.ConfigConstants;
+import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.runtime.state.filesystem.FsStateBackend;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -24,6 +28,10 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.util.Collector;
+
+import org.apache.flink.configuration.ConfigConstants;
+import org.apache.flink.configuration.Configuration;
+
 
 public class Main {
     public static void main(String[] args) throws Exception {
@@ -37,6 +45,7 @@ public class Main {
     public static  void wordCountBatchByDataSetApi()throws Exception{
         //1 创建执行环境
         ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+//        final StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(new Configuration());
         //2 读取数据
         DataSource<String> textFile = env.readTextFile("input/word.txt");
         //3 按行切分，转换
@@ -80,7 +89,7 @@ public class Main {
 //        });
 
         ///使用Lambda 表达式，必须手动指定输出类型Types.TUPLE(Types.STRING, Types.INT)
-        SingleOutputStreamOperator<Tuple2<String, Integer>> wordAndOne = textFile.flatMap((FlatMapFunction<String, Tuple2<String, Integer>>) ( s,collector) -> {
+        SingleOutputStreamOperator<Tuple2<String, Integer>> wordAndOne = textFile.flatMap((FlatMapFunction<String, Tuple2<String, Integer>>) (s, collector) -> {
             String[] strings = s.split(" ");
             for (String word : strings) {
                 Tuple2<String, Integer> stringIntegerTuple2 = Tuple2.of(word, 1);
@@ -135,16 +144,25 @@ public class Main {
 
 
     public static void flinkCDC() throws Exception {
+        Configuration configuration = new Configuration();
+        configuration.setInteger(RestOptions.PORT,9091);//指定 Flink Web UI 端口为9091
         //1 获取flink执行环境
-        StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
+//        StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment(configuration);
+        StreamExecutionEnvironment environment = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(configuration);
+
         environment.setParallelism(1);
-        //1.1开启CK
+//        //1.1开启CK
         environment.enableCheckpointing(5000);
-        environment.getCheckpointConfig().setAlignmentTimeout(10000);
         environment.getCheckpointConfig().setCheckpointingMode(CheckpointingMode.EXACTLY_ONCE);
         environment.getCheckpointConfig().setMaxConcurrentCheckpoints(1);
 
-//        environment.setStateBackend(new FsStateBackend())
+
+//        // 设置重启策略
+//        environment.setRestartStrategy(RestartStrategies.fixedDelayRestart(
+//                3, // 重试次数
+//                Time.seconds(10) // 重试间隔
+//        ));
+
 
         //2 通过flink CDC构建SourceFunction
         DebeziumSourceFunction<String> sourceFunction = MySqlSource.<String>builder()
@@ -154,10 +172,11 @@ public class Main {
                 .password("Estim@b509")
                 .databaseList("cdc_test")
                 .tableList("cdc_test.user_info")
-                .deserializer(new StringDebeziumDeserializationSchema())
+                .deserializer(new CustomerDeserializationSchema())
                 .startupOptions(StartupOptions.initial())
                 .build();
         DataStreamSource<String> dataStreamSource = environment.addSource(sourceFunction);
+        System.out.println("等待数据");
         //3 数据打印
         dataStreamSource.print();
         //4 启动任务
