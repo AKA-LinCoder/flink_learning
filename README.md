@@ -28,4 +28,7 @@
 - 进入.ssh目录下
 - 执行 ssh-keygen -t rsa
 - 执行 ssh-copy-id hadoop102(ssh-copy-id hadoop103,ssh-copy-id hadoop104)
-- 这样再执行xsync命令就不需要再次输入密码了 
+- 这样再执行xsync命令就不需要再次输入密码了
+
+#### zookeeper leader 选取规则
+先启动的是leader
