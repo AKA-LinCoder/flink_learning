@@ -57,7 +57,7 @@ class CustomerDeserializationSchema implements DebeziumDeserializationSchema {
                 afterJson.put(field.name(), after.get(field));
             }
         }
-        result.put("after", beforeJson);
+        result.put("after", afterJson);
 
         // 获取操作类型
         Envelope.Operation operation = Envelope.operationFor(sourceRecord);

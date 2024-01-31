@@ -1,10 +1,14 @@
 package com.echo;//package com.echo;
 
 import com.ibm.icu.impl.Row;
-import com.ververica.cdc.connectors.mysql.MySqlSource;
+//import com.ververica.cdc.connectors.mysql.MySqlSource;
+//import com.ververica.cdc.connectors.mysql.source;
+import com.ververica.cdc.connectors.mysql.source.MySqlSource;
 import com.ververica.cdc.connectors.mysql.table.StartupOptions;
 import com.ververica.cdc.debezium.DebeziumSourceFunction;
+import com.ververica.cdc.debezium.JsonDebeziumDeserializationSchema;
 import com.ververica.cdc.debezium.StringDebeziumDeserializationSchema;
+import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.api.common.time.Time;
@@ -162,23 +166,37 @@ public class Main {
 //                3, // 重试次数
 //                Time.seconds(10) // 重试间隔
 //        ));
-
-
         //2 通过flink CDC构建SourceFunction
-        DebeziumSourceFunction<String> sourceFunction = MySqlSource.<String>builder()
+//        DebeziumSourceFunction sourceFunction = MySqlSource.<String>builder()
+//                .hostname("192.168.1.133")
+//                .port(3306)
+//                .username("root")
+//                .password("Estim@b509")
+//                .databaseList("cdc_test")
+//                .tableList("cdc_test.user_info")
+//                .deserializer(new CustomerDeserializationSchema())
+//                .startupOptions(StartupOptions.initial())
+//                .build();
+//        DataStreamSource<String> dataStreamSource = environment.addSource(sourceFunction);
+        MySqlSource sqlSource = MySqlSource.<String>builder()
                 .hostname("192.168.1.133")
                 .port(3306)
                 .username("root")
                 .password("Estim@b509")
                 .databaseList("cdc_test")
                 .tableList("cdc_test.user_info")
+                .scanNewlyAddedTableEnabled(true) // 开启支持新增表
                 .deserializer(new CustomerDeserializationSchema())
                 .startupOptions(StartupOptions.initial())
                 .build();
-        DataStreamSource<String> dataStreamSource = environment.addSource(sourceFunction);
+        //1 第一个参数 ：源
+        //2 第二个参数：时间标志位，设置水印（Watermark）策略的地方。在流处理中，水印用于处理事件时间（event time）和实现基于时间的操作
+        //3 给数据流起的一个名称，用于标识这个数据流
+        DataStreamSource streamSource = environment.fromSource(sqlSource, WatermarkStrategy.noWatermarks(), "MySQL Source");
+//        DataStreamSource<String> dataStreamSource = environment.addSource(sqlSource);
         System.out.println("等待数据");
         //3 数据打印
-        dataStreamSource.print();
+        streamSource.print();
         //4 启动任务
         environment.execute("FlinkCDC");
     }
