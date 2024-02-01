@@ -30,5 +30,39 @@
 - 执行 ssh-copy-id hadoop102(ssh-copy-id hadoop103,ssh-copy-id hadoop104)
 - 这样再执行xsync命令就不需要再次输入密码了
 
-#### zookeeper leader 选取规则
-先启动的是leader
+[//]: # (#### zookeeper leader 选取规则)
+
+[//]: # (先启动的是leader)
+
+source 
+    taildir 实时读取文件数据，支持断点续传
+    avro 配合sink avro使用
+    nc
+    exec 不支持断点续传
+    spooling 支持断点续传，监控文件夹
+    kafka source
+channel
+    file
+    memory
+    kafka channel
+slink
+    hdfs sink
+    kafka sink
+
+### Flume配置流程
+- 定义组件
+  - al.sources = r1
+  - al.channel = c1
+- 配置sources
+  - al.sources.r1.type = TAILDIR
+  - al.sources.r1.filegroups = f1
+  - al.sources.r1.filegroups.f1 = /opt/module/applog/log/app.*
+  - al.sources.r1.positionFile = /opt/module/flime/taildir_position.json
+- 配置channels
+  - al.channels.c1.type = org.apache.flume.channel.kafka.KafkaChannel
+  - al.sources.c1.kafka.bootstrap.servers = hadoop102:9092,hadoop103:9092
+  - al.sources.r1.kafka.topic = topic_log
+  - al.sources.r1.parseAsFlumeEvent = false 
+- 配置sink
+- 组装
+  - al.sources.r1.channels =  c1
