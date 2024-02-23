@@ -28,7 +28,6 @@ public class ETLInterceptor implements Interceptor {
         }else{
             return  null;
         }
-
     }
 
     /// 删除有问题的数据，保留没有问题的数据
@@ -61,14 +60,13 @@ public class ETLInterceptor implements Interceptor {
 
     @Override
     public void close() {
-
     }
 
     public static class Builder implements Interceptor.Builder{
 
         @Override
         public Interceptor build() {
-            return new ETLInterceptor() ;
+            return new ETLInterceptor();
         }
 
         @Override
